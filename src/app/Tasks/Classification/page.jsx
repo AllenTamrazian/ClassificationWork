@@ -88,7 +88,7 @@ const ClassificationPage = () => {
         <OptionSelector onSubmit={handleSubmit} />
       </div>
       {/* Render the tutorial modal if isVisible state is true */}
-      <SampleImages isVisible={isTutorialVisible} onClose={() => setIsTutorialVisible(false)} />
+      <SampleImages />
     </div>
   );
 };

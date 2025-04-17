@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Circle, Line, Rect,  Image as KonvaImage, Stage, Layer } from 'react-konva';
+import { Circle, Line, Rect, Image as KonvaImage, Stage, Layer } from 'react-konva';
 import useImage from 'use-image';
 
 function DisplayRock({ rock }) {
@@ -10,53 +10,81 @@ function DisplayRock({ rock }) {
   const stageWidth = window.innerWidth;
   const stageHeight = window.innerHeight;
 
+  // Debug rock prop
+  useEffect(() => {
+    console.log('Rock prop:', rock);
+  }, [rock]);
+
   useEffect(() => {
     if (rock && rock.location) {
-      setLocation(parseWKTPoint(rock.location));
+      const parsedLocation = parseWKTPoint(rock.location);
+      setLocation(parsedLocation);
+    } else {
+      setLocation(null);
     }
   }, [rock]);
 
   useEffect(() => {
     if (rock && rock.longest_line) {
-      setLongestLine(parseWKTLine(rock.longest_line));
+      const parsedLine = parseWKTLine(rock.longest_line);
+      setLongestLine(parsedLine);
+    } else {
+      setLongestLine(null);
     }
   }, [rock]);
 
   useEffect(() => {
     if (rock && rock.distance) {
       setDistance(rock.distance);
+    } else {
+      setDistance(null);
     }
   }, [rock]);
 
   function parseWKTPoint(wktPoint) {
-    // Remove the 'POINT(' and ')' parts from the string
-    const cleanedData = wktPoint.replace('POINT(', '').replace(')', '');
-    const [x, y] = cleanedData.split(' ');
-    // Convert coordinates to a percentage of the image dimensions (1500x1000)
-    const adjustedX = parseFloat(x) / 1500 * stageWidth;
-    const adjustedY = (1000 - parseFloat(y)) / 1000 * stageHeight; // Invert Y-coordinate
-    return { x: adjustedX, y: adjustedY };
+    if (!wktPoint || typeof wktPoint !== 'string' || !wktPoint.startsWith('POINT(')) {
+      console.warn('Invalid WKT point:', wktPoint);
+      return null;
+    }
+
+    try {
+      const cleanedData = wktPoint.replace('POINT(', '').replace(')', '');
+      const [x, y] = cleanedData.split(' ').map(Number);
+      if (isNaN(x) || isNaN(y)) {
+        console.warn('Invalid coordinates in WKT point:', cleanedData);
+        return null;
+      }
+      const adjustedX = x / 1500 * stageWidth;
+      const adjustedY = (1000 - y) / 1000 * stageHeight;
+      return { x: adjustedX, y: adjustedY };
+    } catch (error) {
+      console.error('Error parsing WKT point:', error, wktPoint);
+      return null;
+    }
   }
 
   function parseWKTLine(wktLine) {
-    // Remove the 'LINESTRING(' and ')' parts from the string
-    const cleanedData = wktLine.match(/\d+\.\d+|\d+/g).map(Number);
+    if (!wktLine || typeof wktLine !== 'string' || !wktLine.startsWith('LINESTRING(')) {
+      console.warn('Invalid WKT line:', wktLine);
+      return null;
+    }
 
-    // const points = [];
-    // for (let i = 0; i < cleanedData.length; i += 2) {
-    //     points.push([cleanedData[i], cleanedData[i + 1]]);
-    // }
-
-    const adjustedX1 = parseFloat(cleanedData[0]) / 1500 * stageWidth;
-    const adjustedX2 = parseFloat(cleanedData[2]) / 1500 * stageWidth;
-    const adjustedY1 = (1000 - parseFloat(cleanedData[1])) / 1000 * stageHeight; // Invert Y-coordinate
-    const adjustedY2 = (1000 - parseFloat(cleanedData[3])) / 1000 * stageHeight; // Invert Y-coordinate
-    return { x1: adjustedX1, y1: adjustedY1, x2: adjustedX2, y2: adjustedY2 };
+    try {
+      const cleanedData = wktLine.match(/\d+\.\d+|\d+/g)?.map(Number) || [];
+      if (cleanedData.length < 4) {
+        console.warn('Insufficient points in WKT line:', cleanedData);
+        return null;
+      }
+      const adjustedX1 = cleanedData[0] / 1500 * stageWidth;
+      const adjustedX2 = cleanedData[2] / 1500 * stageWidth;
+      const adjustedY1 = (1000 - cleanedData[1]) / 1000 * stageHeight;
+      const adjustedY2 = (1000 - cleanedData[3]) / 1000 * stageHeight;
+      return { x1: adjustedX1, y1: adjustedY1, x2: adjustedX2, y2: adjustedY2 };
+    } catch (error) {
+      console.error('Error parsing WKT line:', error, wktLine);
+      return null;
+    }
   }
-
-  console.log('location', location);
-  console.log('longest line', longestLine);
-  console.log('distance', distance);
 
   return (
     <Stage width={stageWidth} height={stageHeight}>
@@ -68,37 +96,31 @@ function DisplayRock({ rock }) {
             y={0}
             width={stageWidth}
             height={stageHeight}
-            // crop={{
-            //   x: 1156 - 56 ,
-            //   y: 234 - 56 ,
-            //   width: 1156 + 56,
-            //   height: 234 + 56,
-            // }}
           />
         )}
         {location && (
           <Circle
             x={location.x}
             y={location.y}
-            radius={5} // Adjust the size of the dot as needed
+            radius={5}
             fill="red"
           />
         )}
-        {/*Shows longest line*/}
-        {/* {longestLine && (
+        {longestLine && (
           <Line
-          points={[longestLine.x1, longestLine.y1, longestLine.x2, longestLine.y2]}
-          stroke='blue'
-          strokeWidth={5}
+            points={[longestLine.x1, longestLine.y1, longestLine.x2, longestLine.y2]}
+            stroke="blue"
+            strokeWidth={5}
           />
-        )} */}
+        )}
         {location && distance && (
           <Rect
             x={location.x - distance}
             y={location.y - distance}
-            width={distance * 2 }
+            width={distance * 2}
             height={distance * 2}
-            stroke={1}
+            strokeWidth={1}
+            stroke="black"
           />
         )}
       </Layer>
