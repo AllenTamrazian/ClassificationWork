@@ -7,7 +7,7 @@ import { NextResponse } from 'next/server';
 export async function GET(req) {
   try {
     // Fetch all images from the "Image" table in the database
-    const res = await fetch("http://localhost:8080/api/images");
+    const res = await fetch("http://localhost:8080/viperws_1_0_SNAPSHOT_war/api/images");
     const images = await res.json();
 
     // If images are found, return them

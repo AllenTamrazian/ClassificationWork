@@ -10,62 +10,85 @@ const DisplayRocks = dynamic(() => import('../../(components)/Classifying/Displa
 });
 
 const ClassifyingPage = () => {
-    const { data: session } = useSession();
+  const { data: session } = useSession();
 
-    // if no session, redirect to api/auth/signin
-    if (!session) {
-      redirect('/api/auth/signin?callbackUrl=/Tasks/Classifying');
-    }
+  // Redirect unauthenticated users
+  if (!session) {
+    redirect('/api/auth/signin?callbackUrl=/Tasks/Classifying');
+  }
 
   const [rocks, setRocks] = useState([]);
-  const [currentIndex, setCurrentIndex] = useState(() => {
-    const savedIndex = localStorage.getItem('lastViewedImage');
-    return savedIndex ? parseInt(savedIndex, 10) : 0;
-  });
+  const [currentIndex, setCurrentIndex] = useState(0); // Default to 0
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
 
+  // Initialize currentIndex from localStorage on client-side
+  useEffect(() => {
+    const savedIndex = localStorage.getItem('lastViewedImage');
+    if (savedIndex) {
+      setCurrentIndex(parseInt(savedIndex, 10));
+    }
+  }, []); // Runs once on mount
+
+  // Save currentIndex to localStorage when it changes
+  useEffect(() => {
+    localStorage.setItem('lastViewedImage', currentIndex.toString());
+  }, [currentIndex]);
+
+  // Handle Enter key for submission
   useEffect(() => {
     const handleKeyDown = (event) => {
-      if (event.key === 'Enter') {
+      if (event.key === 'Enter' && !loading && !error && rocks.length > 0) {
         handleSubmit();
       }
     };
-    
     window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [currentIndex, rocks.length, loading, error]);
 
-    return () => {
-      window.removeEventListener('keydown', handleKeyDown);
-    };
-  }, [currentIndex, rocks.length]); // Include dependencies that are used inside the event handler
-
+  // Fetch rocks from API
   useEffect(() => {
     const fetchRocks = async () => {
-      // Add your fetch logic here
+      setLoading(true);
       try {
         const response = await fetch("/api/classifying/rocks");
-        if (!response.ok) throw new Error("Failed to fetch rocks");
+        if (!response.ok) {
+          throw new Error(`Failed to fetch rocks: ${response.status}`);
+        }
         const data = await response.json();
-        console.log("date", data[0]);
+        console.log("Fetched rocks:", data[0]);
         setRocks(data);
       } catch (error) {
-        console.error("Error:", error);
+        console.error("Fetch error:", error);
+        setError("Failed to load rocks. Please try again.");
+      } finally {
+        setLoading(false);
       }
     };
-    
     fetchRocks();
   }, []);
 
-  const handleSubmit = async () => {
-    setCurrentIndex((prevIndex) => (prevIndex + 1) % rocks.length);
+  const handleSubmit = () => {
+    if (rocks.length > 0) {
+      setCurrentIndex((prevIndex) => (prevIndex + 1) % rocks.length);
+    }
   };
+
+  // Render loading, error, or empty states
+  if (loading) return <div>Loading...</div>;
+  if (error) return <div>{error}</div>;
+  if (rocks.length === 0) return <div>No rocks available.</div>;
 
   return (
     <>
       <div style={{ display: "flex", justifyContent: "space-between", padding: "20px" }}>
         <div style={{ flex: 1 }}>
-          {rocks.length > 0 && <DisplayRocks rock={rocks[currentIndex]} />}
+          <DisplayRocks rock={rocks[currentIndex]} />
         </div>
       </div>
-      <button onClick={handleSubmit}>Submit</button>
+      <button onClick={handleSubmit} disabled={rocks.length === 0}>
+        Submit
+      </button>
     </>
   );
 };

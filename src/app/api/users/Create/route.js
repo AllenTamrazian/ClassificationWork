@@ -46,7 +46,7 @@ export async function POST(req) {
     //   },
     // });
 
-    const res = await fetch(`http://localhost:8080/api/users/${email}`);
+    const res = await fetch(`http://localhost:8080/viperws_1_0_SNAPSHOT_war/api/users/${email}`);
     const check = await res.json();
 
     // If duplicate user exists, return error
@@ -67,7 +67,7 @@ export async function POST(req) {
       },
     });*/
 
-    const res2 = await fetch("http://localhost:8080/api/users/Create",{
+    const res2 = await fetch("http://localhost:8080/viperws_1_0_SNAPSHOT_war/api/users/Create",{
       method : "POST",
       headers : {
         "Content-Type" : "application/json"

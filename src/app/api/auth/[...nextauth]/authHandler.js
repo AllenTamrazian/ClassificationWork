@@ -19,7 +19,7 @@ export const handleOAuthLogin = async (profile, account) => {
 
     // Check if the user exists in the database
     let user;
-    let userResponse = await fetch(`http://localhost:8080/api/users/${userData.email}`);
+    let userResponse = await fetch(`http://localhost:8080/viperws_1_0_SNAPSHOT_war/api/users/${userData.email}`);
     if (userResponse.exists === true) {
       user = await userResponse.json();
     } else {
@@ -44,7 +44,7 @@ export const handleOAuthLogin = async (profile, account) => {
 
     // If the user doesn't exist, create a new user
     if (user.exist !== true) {
-      const response = await fetch("http://localhost:8080/api/users/", {
+      const response = await fetch("http://localhost:8080/viperws_1_0_SNAPSHOT_war/api/users/", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -103,7 +103,7 @@ export const handleOAuthLogin = async (profile, account) => {
       */
 
       // Create or update the account associated with the user
-    await fetch("http://localhost:8080/api/accounts/upsert",{
+    await fetch("http://localhost:8080/viperws_1_0_SNAPSHOT_war/api/accounts/upsert",{
       method: "POST",
       headers: {
         "Content-Type": "application/json",

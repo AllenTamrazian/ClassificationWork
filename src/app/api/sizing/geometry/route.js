@@ -1,113 +1,164 @@
-/*
-
-  try {
-    const geometries = await req.json();
-    await prisma.$transaction(async (prisma) => {
-      for (const geometry of geometries) {
-        await prisma.$executeRaw`INSERT INTO your_table_name (geom) VALUES (ST_GeomFromGeoJSON(${JSON.stringify(geometry)}))`;
-      }
-    });
-    res.status(200).json({ message: 'Geometries saved successfully' });
-  } catch (error) {
-    console.error('Failed to save geometries:', error);
-    res.status(500).json({ message: 'Server error while saving geometries' });
-  }
-}
-
-*/
-
-
 import { getServerSession } from 'next-auth';
 import prisma from '../../../lib/prisma';
 import { NextResponse } from 'next/server';
-import { options } from '../../auth/[...nextauth]/options'
-
-
-
+import { options } from '../../auth/[...nextauth]/options';
 
 export async function POST(req) {
   if (req.method !== 'POST') {
-    res.status(405).json({ message: 'Method not allowed' });
-    return;
-}
+    return new NextResponse(JSON.stringify({ message: 'Method not allowed' }), { status: 405 });
+  }
 
-    try {
-      //console.log(req.headers); // Ensure it's application/json
-      //   const rawBody = await req.text(); // Temporarily log raw body
-      //   console.log(rawBody);
+  try {
+    // Get the user session
+    const session = await getServerSession(options);
+    if (!session || !session.user || !session.user.id || isNaN(session.user.id) || session.user.id <= 0) {
+      return new NextResponse(JSON.stringify({ message: 'Not Authenticated or invalid userId' }), { status: 403 });
+    }
 
+    const body = await req.json();
+    console.log('Received payload:', JSON.stringify(body, null, 2));
 
+    const { geometries, quadrant } = body;
 
-      // Get the user session
-      const session = await getServerSession(options);
+    // Validate inputs
+    if (!geometries || !Array.isArray(geometries) || geometries.length === 0) {
+      return new NextResponse(JSON.stringify({ message: 'Missing or invalid geometries array' }), { status: 400 });
+    }
+    if (!quadrant || typeof quadrant !== 'object') {
+      return new NextResponse(JSON.stringify({ message: 'Missing or invalid quadrant object' }), { status: 400 });
+    }
 
-      // If the user is not authenticated, return a 403 Forbidden response
-      if (!session || !session.user) {
-        // Not Authenticated
-        return new NextResponse(JSON.stringify({ message: 'Not Authenticated' }), { status: 403 });
+    // Validate quadrant fields
+    const invalidFields = [];
+    if (quadrant.width === undefined || quadrant.width === null) {
+      invalidFields.push('width: missing');
+    } else if (isNaN(quadrant.width) || quadrant.width <= 0) {
+      invalidFields.push('width: must be a positive number');
+    }
+    if (quadrant.height === undefined || quadrant.height === null) {
+      invalidFields.push('height: missing');
+    } else if (isNaN(quadrant.height) || quadrant.height <= 0) {
+      invalidFields.push('height: must be a positive number');
+    }
+    if (quadrant.quadrantNumber === undefined || quadrant.quadrantNumber === null) {
+      invalidFields.push('quadrantNumber: missing');
+    } else if (isNaN(quadrant.quadrantNumber) || quadrant.quadrantNumber <= 0) {
+      invalidFields.push('quadrantNumber: must be a positive number');
+    }
+    if (!quadrant.image || typeof quadrant.image !== 'object') {
+      invalidFields.push('image: missing or invalid');
+    } else {
+      if (quadrant.image.id === undefined || quadrant.image.id === null) {
+        invalidFields.push('image.id: missing');
+      } else if (isNaN(quadrant.image.id) || quadrant.image.id <= 0) {
+        invalidFields.push('image.id: must be a positive number');
       }
+      if (quadrant.image.numQuadrants === undefined || quadrant.image.numQuadrants === null) {
+        invalidFields.push('image.numQuadrants: missing');
+      } else if (isNaN(quadrant.image.numQuadrants) || quadrant.image.numQuadrants <= 0) {
+        invalidFields.push('image.numQuadrants: must be a positive number');
+      }
+    }
 
-      const { geometries, quadrant } = await req.json();
-      const userId = session.user.id;
-      const imageId = quadrant.image.id;
-      const results = await saveGeometries(geometries, userId, imageId, quadrant);
+    if (invalidFields.length > 0) {
+      return new NextResponse(JSON.stringify({
+        message: `Invalid quadrant data: ${invalidFields.join(', ')}`
+      }), { status: 400 });
+    }
 
-      return new NextResponse(JSON.stringify({ message: 'Geometries stored successfully', results }), { status: 200 });
+    const userId = 3;
+    const imageId = Number(quadrant.image.id);
+    const results = await saveGeometries(geometries, userId, imageId, quadrant);
+
+    return new NextResponse(JSON.stringify({ message: 'Geometries stored successfully', results }), { status: 200 });
   } catch (error) {
-      console.error('Error handling POST request:', error);
-      return new NextResponse(JSON.stringify({ message: 'Internal Server Error' }), { status: 500 });
+    console.error('Error handling POST request:', error);
+    return new NextResponse(JSON.stringify({
+      message: 'Internal Server Error',
+      error: error.message
+    }), { status: 500 });
   }
 }
 
 async function saveGeometries(geometries, userId, imageId, quadrant) {
-  const { width, height } = quadrant;
-  const n = Math.sqrt(quadrant.image.numQuadrants);
+  const { width, height, quadrantNumber, image } = quadrant;
+  const n = Math.sqrt(image.numQuadrants);
+  if (isNaN(n) || n <= 0) {
+    throw new Error('Invalid numQuadrants: must yield a positive square root');
+  }
   const imageHeight = n * height;
-  const quadrantIndex = quadrant.quadrantNumber - 1;
+  const quadrantIndex = quadrantNumber - 1;
   const qx = quadrantIndex % n;
   const qy = Math.floor(quadrantIndex / n);
 
-    const queries = await Promise.all(geometries.map(async (geometry) => {
-        let coordinates = geometry.coordinates[0];
-        if (coordinates[0] !== coordinates[coordinates.length - 1]) {
-            coordinates.push(coordinates[0]);
-        }
+  const queries = await Promise.all(geometries.map(async (geometry, index) => {
+    // Validate geometry
+    if (!geometry.coordinates || !Array.isArray(geometry.coordinates) || geometry.coordinates.length === 0) {
+      throw new Error(`Invalid geometry at index ${index}: missing or empty coordinates`);
+    }
 
-        const globalCoordinates = coordinates.map(([x, y]) => {
+    let coordinates = geometry.coordinates[0];
+    if (!Array.isArray(coordinates) || coordinates.length < 3) {
+      throw new Error(`Invalid geometry at index ${index}: POLYGON requires at least 3 points`);
+    }
 
-            const gx = Math.round(qx * width + x);
-            const gy = imageHeight - (Math.round(qy * height + y));
-            return `${gx} ${gy}`;
-        }).join(", ");
+    // Ensure closed POLYGON
+    if (coordinates[0][0] !== coordinates[coordinates.length - 1][0] ||
+        coordinates[0][1] !== coordinates[coordinates.length - 1][1]) {
+      coordinates = [...coordinates, coordinates[0]];
+    }
 
+    // Transform coordinates
+    const globalCoordinates = coordinates.map(([x, y], ptIndex) => {
+      if (isNaN(x) || isNaN(y)) {
+        throw new Error(`Invalid coordinates at index ${index}, point ${ptIndex}: x or y is NaN`);
+      }
+      const gx = Math.round(qx * width + x);
+      const gy = imageHeight - Math.round(qy * height + y);
+      if (isNaN(gx) || isNaN(gy)) {
+        throw new Error(`Invalid coordinates at index ${index}, point ${ptIndex}: transformed to NaN`);
+      }
+      return `${gx} ${gy}`;
+    }).join(', ');
 
-        const wkt = `POLYGON((${globalCoordinates}))`;
+    const wkt = `POLYGON((${globalCoordinates}))`;
 
-        // return prisma.$executeRawUnsafe(
-        //     INSERT INTO "UserGeometry" ("userId", "drawing", "imageId") VALUES ($1, ST_GeomFromText($2), $3) RETURNING id;,
-        //     userId,
-        //     wkt,
-        //     imageId
-        // );
+    // Validate WKT format
+    if (!wkt.match(/^POLYGON\s*\(\s*\([^)]+\)\s*\)$/)) {
+      throw new Error(`Invalid WKT at index ${index}: malformed POLYGON`);
+    }
 
-        const res = await fetch("http://localhost:8080/api/sizing/geometry", {
-            method: "PUT",
-            headers: {
-                "Content-Type": "application/json",
-            },
-            body: JSON.stringify({
-                userId: userId,
-                wkt: wkt,
-                imageId: imageId
-            }),
-        });
+    // Log payload for debugging
+    console.log(`Sending to Java service [geometry ${index}]:`, { userId, imageId, wkt });
 
-        if (!res.ok) {
-            const errorResponse = await res.text();
-            throw new Error(`Error: ${errorResponse.message} - ${errorResponse.error}`);
-        }
+    // Send to Java web service
+    const res = await fetch('http://localhost:8080/viperws_1_0_SNAPSHOT_war/api/sizing/geometry', {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        userId,
+        wkt,
+        imageId
+      }),
+    });
 
-        return await res.json();
-    }));
+    let responseBody;
+    try {
+      responseBody = await res.json();
+    } catch {
+      responseBody = { error: await res.text() || 'Unknown error' };
+    }
+
+    if (!res.ok) {
+      console.error(`Java service error [geometry ${index}]:`, responseBody);
+      throw new Error(`Java service error: ${responseBody.error || responseBody.message || res.statusText}`);
+    }
+
+    console.log(`Java service response [geometry ${index}]:`, responseBody);
+    return responseBody;
+  }));
+
   return queries;
 }

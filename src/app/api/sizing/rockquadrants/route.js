@@ -17,7 +17,7 @@ export async function GET(req) {
           });*/
         // If images are found, return them
 
-        const res = await fetch("http://localhost:8080/api/rockQuadrants")
+        const res = await fetch("http://localhost:8080/viperws_1_0_SNAPSHOT_war/api/rockQuadrants")
 
         const rockQuadrants = await res.json();
 

@@ -48,7 +48,7 @@ export async function POST(req) {
       // If the userMark already exists, update the existing user marks rock count
       // The user should not scout the same image more than once, however if they do, their new entry will overwrite the old one
 
-        const res = await fetch("http://localhost:8080/api/scouting/newUserMark",
+        const res = await fetch("http://localhost:8080/viperws_1_0_SNAPSHOT_war/api/scouting/newUserMark",
           {
             method: "POST",
             headers: {

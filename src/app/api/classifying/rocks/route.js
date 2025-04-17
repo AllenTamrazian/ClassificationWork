@@ -27,7 +27,7 @@ export async function GET(req) {
 //         "Image" ON "RockCenter"."imageId" = "Image".id
 // `;
 
-        const res = await fetch("http://localhost:8080/api/classifying");
+        const res = await fetch("http://localhost:8080/viperws_1_0_SNAPSHOT_war/api/classifying");
         const rocks = await res.json();
 
         // Log the first rock entry to check data

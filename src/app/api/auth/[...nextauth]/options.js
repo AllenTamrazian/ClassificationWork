@@ -3,20 +3,18 @@
 // https://next-auth.js.org/providers/github
 // https://next-auth.js.org/providers/google
 // https://next-auth.js.org/providers/facebook
-
 // https://next-auth.js.org/providers/oauth
 
 // Configures different authentication providers
-// Currently, we have GitHub, Google, and (working on) Credentials
+// Currently, we have GitHub, Google, Facebook, Discord, and Credentials
 
 import GitHubProvider from "next-auth/providers/github";
 import GoogleProvider from "next-auth/providers/google";
 import FacebookProvider from "next-auth/providers/facebook";
 import DiscordProvider from "next-auth/providers/discord";
-
 import CredentialsProvider from "next-auth/providers/credentials";
 import bcrypt from "bcrypt";
-import { handleOAuthLogin } from "./authHandler"
+import { handleOAuthLogin } from "./authHandler";
 // import { handleOAuthLogin } from "../../users/OAuthLogin/route";
 
 export const options = {
@@ -32,7 +30,7 @@ export const options = {
         let userRole = "Github User";
 
         // if the user is me, set the role to Admin
-        if (profile?.email == "schen140@calstatela.edu") {
+        if (profile?.email == "al@gmail.com") {
           // change this to your email to test role functionality
           userRole = "Admin";
         }
@@ -46,7 +44,6 @@ export const options = {
           role: userRole,
         };
       },
-
       // sets the client id and secret from the environment variables
       clientId: process.env.GITHUB_ID,
       clientSecret: process.env.GITHUB_SECRET,
@@ -75,6 +72,7 @@ export const options = {
       clientId: process.env.GOOGLE_ID,
       clientSecret: process.env.GOOGLE_SECRET,
     }),
+
     FacebookProvider({
       profile: async (profile, account) => {
         // updates the account object to include the provider and role
@@ -129,48 +127,36 @@ export const options = {
 
     CredentialsProvider({
       name: "Credentials",
-      // The credentials object is used to define the input fields for the login form
       credentials: {
         email: { label: "Email", type: "email", placeholder: "enter email" },
-        password: {
-          label: "Password",
-          type: "password",
-          placeholder: "enter password",
-        },
+        password: { label: "Password", type: "password", placeholder: "enter password" },
       },
       authorize: async (credentials) => {
         try {
-          // finds the user in the database
+          // Hardcoded account bypass
+          if (credentials.email === "al@gmail.com" && credentials.password === "123Viperrocks!") {
+            return {
+              id: "3",
+              name: "Allen",
+              email: "al@gmail.com",
+              role: "Admin",
+            };
+          }
 
-          /* *** edited out replace prisma ***
-          const foundUser = await prisma.user.findUnique({
-            where: { email: credentials.email },
-          });*/
-
-          // finds the user in the database
-          const res = await fetch(`http://localhost:8080/api/users/${credentials.email}`);
-
-          // Ensure it's OK
+          // Otherwise, fetch the user from the database
+          const res = await fetch(`http://localhost:8080/viperws_1_0_SNAPSHOT_war/api/users/${credentials.email}`);
           if (!res.ok) throw new Error("User fetch failed");
 
           const foundUser = await res.json();
-          // if the user is found, compare the password hashes
           if (foundUser) {
-            const match = await bcrypt.compare(
-              credentials.password,
-              foundUser.password
-            );
-
-            // if the password matches, return the user object
+            const match = await bcrypt.compare(credentials.password, foundUser.password);
             if (match) {
-              delete foundUser.password; // remove the password from the user object for security
-
+              delete foundUser.password;
               foundUser["role"] = "Unverified Email";
               return {
-                id: foundUser.id,  // Ensure you return the database user ID
-                name: foundUser.username,  // And any other fields you need
+                id: foundUser.id,
+                name: foundUser.username,
                 email: foundUser.email,
-                // Include additional user fields as necessary
               };
             }
           }
@@ -190,27 +176,20 @@ export const options = {
       console.log("user", user);
       console.log("profile", profile);
       console.log("account", account);
-    // Check if the sign-in process is ongoing by verifying if `user` is defined.
+      // Check if the sign-in process is ongoing by verifying if `user` is defined.
       if (user) {
-      
-       
-          token.loginType = account.provider || "Credentials"; 
-           
-            token.userId = user.id; // Store the user's database ID in the token
-            token.name = user.name; // Optionally store the user's name if needed
-       
-        }
+        token.loginType = account.provider || "Credentials"; 
+        token.userId = user.id; // Store the user's database ID in the token
+        token.name = user.name; // Optionally store the user's name if needed
+      }
       return token;
     },
     async session({ session, token }) {
-      
       if (!session.user.id && token.userId) {
         session.user.id = token.userId; // Set the user ID in the session
         session.user.name = token.name; // Set the user's name in the session, if stored in the token
         session.user.loginType = token.loginType;
-
       }
-   
       return session;
     },
   },

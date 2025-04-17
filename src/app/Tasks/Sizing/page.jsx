@@ -1,4 +1,5 @@
-'use client';
+"use client";
+
 import Link from "next/link";
 import React, { useEffect, useState } from "react";
 import LoadingSpinner from "../../(components)/LoadingSpinner/LoadingSpinner";
@@ -18,47 +19,93 @@ const SizingPage = () => {
   }, [status]);
 
   const [quadrants, setQuadrants] = useState([]);
-  
-  // Retrieve the currentIndex from localStorage or default to 0 if not found
-  const [currentIndex, setCurrentIndex] = useState(() => {
-    if (typeof window !== 'undefined'){
-      const savedIndex = localStorage.getItem('lastViewedQuadrant');
-      return savedIndex ? parseInt(savedIndex, 10) : 0;
-    } else {
-      return 0;
-    }
-  });
-  
-  const [labels, setLabels] = useState(() => {
-    // Initialize labels from localStorage
-    return JSON.parse(localStorage.getItem('savedLabels')) || [];
-  });
-  
+  const [currentIndex, setCurrentIndex] = useState(0); // Default to 0
+  const [labels, setLabels] = useState([]); // Default to empty array
   const [isLoading, setIsLoading] = useState(true); // Combined loading state
 
+  // Load initial state from localStorage on client side
+  useEffect(() => {
+    const savedIndex = localStorage.getItem('lastViewedQuadrant');
+    if (savedIndex) {
+      setCurrentIndex(parseInt(savedIndex, 10));
+    }
+
+    const savedLabels = localStorage.getItem('savedLabels');
+    if (savedLabels) {
+      try {
+        setLabels(JSON.parse(savedLabels));
+      } catch (e) {
+        console.error('Failed to parse saved labels:', e);
+        setLabels([]);
+      }
+    }
+  }, []);
+
+  // Save state to localStorage when currentIndex or labels change
   useEffect(() => {
     localStorage.setItem('lastViewedQuadrant', currentIndex.toString());
-    localStorage.setItem('savedLabels', JSON.stringify(labels)); // Save labels to localStorage
+    localStorage.setItem('savedLabels', JSON.stringify(labels));
   }, [currentIndex, labels]);
 
   useEffect(() => {
     const fetchQuadrants = async () => {
-      setIsLoading(true); // Set loading state to true
-      const response = await fetch("/api/sizing/rockquadrants");
-      const data = await response.json();
-      setQuadrants(data);
-      setIsLoading(false); // Set loading state to false after data is fetched
+      setIsLoading(true);
+
+      // Check for cached quadrants
+      const cachedQuadrants = localStorage.getItem("cachedQuadrants");
+      const quadrantsData = cachedQuadrants ? JSON.parse(cachedQuadrants) : null;
+      // const cacheIsValid = quadrantsData && new Date().getTime() - quadrantsData.timestamp < 86400000; // 24 hours
+      const cacheIsValid = false; // Disabled as in ScoutingPage
+
+      if (cacheIsValid) {
+        console.log('Using cached quadrants');
+        setQuadrants(quadrantsData.data);
+        setIsLoading(false);
+      } else {
+        try {
+          const response = await fetch("/api/sizing/rockquadrants");
+          if (!response.ok) {
+            throw new Error("Failed to fetch quadrants");
+          }
+          const data = await response.json();
+          console.log("Fetched quadrants:", JSON.stringify(data, null, 2));
+          setQuadrants(data);
+          localStorage.setItem(
+            "cachedQuadrants",
+            JSON.stringify({ data, timestamp: new Date().getTime() })
+          );
+          setIsLoading(false);
+        } catch (error) {
+          console.error("Error fetching quadrants:", error);
+          setIsLoading(false);
+        }
+      }
     };
+
     fetchQuadrants();
   }, []);
 
   const handleSubmit = async () => {
-    setIsLoading(true); // Set loading state to true
+    setIsLoading(true);
     const geoData = labels.map(label => ({
       type: 'Polygon',
       coordinates: [label.map(point => [point.x, point.y])]
     }));
-    console.log('Submitting...', geoData, quadrants[currentIndex]);
+  
+    // Transform quadrant to match backend expectations
+    const currentQuadrant = quadrants[currentIndex];
+    const transformedQuadrant = {
+      width: currentQuadrant.width,
+      height: currentQuadrant.height,
+      quadrantNumber: currentQuadrant.quadrantnumber, // Map quadrantnumber to quadrantNumber
+      image: {
+        id: currentQuadrant.imageid || currentQuadrant.image.id,
+        numQuadrants: currentQuadrant.image.numquadrants || currentQuadrant.image.numQuadrants
+      }
+    };
+  
+    console.log('Submitting...', { geometries: geoData, quadrant: transformedQuadrant });
+  
     const response = await fetch('/api/sizing/geometry', {
       method: 'POST',
       headers: {
@@ -66,34 +113,36 @@ const SizingPage = () => {
       },
       body: JSON.stringify({
         geometries: geoData,
-        quadrant: quadrants[currentIndex],
+        quadrant: transformedQuadrant,
       })
     });
+  
     if (response.ok) {
       console.log('Submission successful');
-      localStorage.removeItem('savedLabels'); // Clear saved labels from localStorage on submit
+      localStorage.removeItem('savedLabels');
       setLabels([]);
       handleNextQuadrant();
     } else {
-      console.error('Submission failed');
+      const errorData = await response.json();
+      console.error('Submission failed:', errorData);
     }
-    setIsLoading(false); // Set loading state to false after submission
+    setIsLoading(false);
   };
 
-    const handleNextQuadrant = () => {
-        setCurrentIndex(prevIndex => (prevIndex + 1) % quadrants.length);
-    };
+  const handleNextQuadrant = () => {
+    setCurrentIndex(prevIndex => (prevIndex + 1) % quadrants.length);
+  };
 
   return (
     <>
-     <div style={{ paddingLeft: "25px", paddingTop:"30px", paddingBottom:"10px"}}>
+      <div style={{ paddingLeft: "25px", paddingTop: "30px", paddingBottom: "10px" }}>
         <Link href="/Explore">Back</Link>
       </div>
 
-      <h1 style={{ paddingLeft: "20px"}}>Sizing</h1>
-      <div style={{ margin: '20px' }}> {/* Adjust margin size as needed */}
+      <h1 style={{ paddingLeft: "20px" }}>Sizing</h1>
+      <div style={{ margin: '20px' }}>
         {isLoading ? (
-          <LoadingSpinner /> 
+          <LoadingSpinner />
         ) : (
           quadrants.length > 0 && (
             <DisplayQuadrant
@@ -105,12 +154,26 @@ const SizingPage = () => {
           )
         )}
         {!isLoading && (
-                <button style={{ margin: '10px', padding: '10px', borderRadius: '10px', background: '#007bff', color: '#fff', cursor: 'pointer', border: 'none', textDecoration: 'none', width: '120px' }} onClick={handleSubmit}>Submit</button>
+          <button
+            style={{
+              margin: '10px',
+              padding: '10px',
+              borderRadius: '10px',
+              background: '#007bff',
+              color: '#fff',
+              cursor: 'pointer',
+              border: 'none',
+              textDecoration: 'none',
+              width: '120px'
+            }}
+            onClick={handleSubmit}
+          >
+            Submit
+          </button>
         )}
       </div>
     </>
   );
-  
 };
 
 export default SizingPage;

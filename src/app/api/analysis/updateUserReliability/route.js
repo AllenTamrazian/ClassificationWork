@@ -30,7 +30,7 @@ export async function POST(req, res) {
 
             // Update user's reliabilityScore
 
-            await fetch("http://localhost:8080/api/users/updateUserReliability",
+            await fetch("http://localhost:8080/viperws_1_0_SNAPSHOT_war/api/users/updateUserReliability",
                 {
                   method : "PUT",
                   headers: {
