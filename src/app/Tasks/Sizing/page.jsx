@@ -12,18 +12,20 @@ const SizingPage = () => {
   const { data: session, status } = useSession();
 
   useEffect(() => {
-    // Redirect if not authenticated
+    console.log('Session status:', status, 'Session:', session);
+    if (status === "loading") {
+      return;
+    }
     if (status === "unauthenticated") {
       signIn('auth0', { callbackUrl: '/Tasks/Sizing' });
     }
   }, [status]);
 
   const [quadrants, setQuadrants] = useState([]);
-  const [currentIndex, setCurrentIndex] = useState(0); // Default to 0
-  const [labels, setLabels] = useState([]); // Default to empty array
-  const [isLoading, setIsLoading] = useState(true); // Combined loading state
+  const [currentIndex, setCurrentIndex] = useState(0);
+  const [labels, setLabels] = useState([]);
+  const [isLoading, setIsLoading] = useState(true);
 
-  // Load initial state from localStorage on client side
   useEffect(() => {
     const savedIndex = localStorage.getItem('lastViewedQuadrant');
     if (savedIndex) {
@@ -41,7 +43,6 @@ const SizingPage = () => {
     }
   }, []);
 
-  // Save state to localStorage when currentIndex or labels change
   useEffect(() => {
     localStorage.setItem('lastViewedQuadrant', currentIndex.toString());
     localStorage.setItem('savedLabels', JSON.stringify(labels));
@@ -50,12 +51,9 @@ const SizingPage = () => {
   useEffect(() => {
     const fetchQuadrants = async () => {
       setIsLoading(true);
-
-      // Check for cached quadrants
       const cachedQuadrants = localStorage.getItem("cachedQuadrants");
       const quadrantsData = cachedQuadrants ? JSON.parse(cachedQuadrants) : null;
-      // const cacheIsValid = quadrantsData && new Date().getTime() - quadrantsData.timestamp < 86400000; // 24 hours
-      const cacheIsValid = false; // Disabled as in ScoutingPage
+      const cacheIsValid = false;
 
       if (cacheIsValid) {
         console.log('Using cached quadrants');
@@ -91,21 +89,20 @@ const SizingPage = () => {
       type: 'Polygon',
       coordinates: [label.map(point => [point.x, point.y])]
     }));
-  
-    // Transform quadrant to match backend expectations
+
     const currentQuadrant = quadrants[currentIndex];
     const transformedQuadrant = {
       width: currentQuadrant.width,
       height: currentQuadrant.height,
-      quadrantNumber: currentQuadrant.quadrantnumber, // Map quadrantnumber to quadrantNumber
+      quadrantNumber: currentQuadrant.quadrantnumber,
       image: {
         id: currentQuadrant.imageid || currentQuadrant.image.id,
         numQuadrants: currentQuadrant.image.numquadrants || currentQuadrant.image.numQuadrants
       }
     };
-  
+
     console.log('Submitting...', { geometries: geoData, quadrant: transformedQuadrant });
-  
+
     const response = await fetch('/api/sizing/geometry', {
       method: 'POST',
       headers: {
@@ -116,7 +113,7 @@ const SizingPage = () => {
         quadrant: transformedQuadrant,
       })
     });
-  
+
     if (response.ok) {
       console.log('Submission successful');
       localStorage.removeItem('savedLabels');
@@ -143,15 +140,15 @@ const SizingPage = () => {
       <div style={{ margin: '20px' }}>
         {isLoading ? (
           <LoadingSpinner />
+        ) : quadrants.length > 0 ? (
+          <DisplayQuadrant
+            key={quadrants[currentIndex].id}
+            quadrant={quadrants[currentIndex]}
+            labels={labels}
+            setLabels={setLabels}
+          />
         ) : (
-          quadrants.length > 0 && (
-            <DisplayQuadrant
-              key={`${quadrants[currentIndex].image.imageURL}-${quadrants[currentIndex].id}`}
-              quadrant={quadrants[currentIndex]}
-              labels={labels}
-              setLabels={setLabels}
-            />
-          )
+          <div>No quadrants available for sizing.</div>
         )}
         {!isLoading && (
           <button

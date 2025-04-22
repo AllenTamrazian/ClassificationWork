@@ -4,31 +4,69 @@ import useImage from 'use-image';
 import handleSubmit from '@/app/Tasks/Sizing/page';
 
 const DisplayQuadrant = ({ quadrant, labels, setLabels }) => {
-  //"https://i.ibb.co/xtXVSdQM/ec86004a-97ec-4249-80c1-475fb1784842.jpg"
-  const [konvaImage] = useImage(quadrant.image.imageURL);
-  //const [konvaImage] = useImage("https://i.ibb.co/xtXVSdQM/ec86004a-97ec-4249-80c1-475fb1784842.jpg");
+  // All hooks at the top
+  const imageUrl = quadrant.image?.imageurl;
+  const [konvaImage, status] = useImage(imageUrl);
   const [history, setHistory] = useState(() => JSON.parse(localStorage.getItem('history')) || []);
   const [future, setFuture] = useState(() => JSON.parse(localStorage.getItem('future')) || []);
   const [drawing, setDrawing] = useState(false);
   const [points, setPoints] = useState([]);
   const [dimensions, setDimensions] = useState({ width: quadrant.width, height: quadrant.height });
 
+  // Resize effect to preserve aspect ratio
   useEffect(() => {
     const resizeHandler = () => {
-      const scale = Math.min(window.innerWidth / quadrant.width, window.innerHeight / quadrant.height);
-      setDimensions({ width: quadrant.width * scale - 250, height: quadrant.height * scale - 300});
+      // Use the cropped quadrant's dimensions
+      const quadrantWidth = quadrant.width || 1920;
+      const quadrantHeight = quadrant.height || 1080;
+      const quadrantAspectRatio = quadrantWidth / quadrantHeight;
+
+      // Calculate maximum dimensions based on viewport (80% of window size)
+      const maxWidth = window.innerWidth * 0.8;
+      const maxHeight = window.innerHeight * 0.8;
+
+      // Choose scale factor to fit within viewport while preserving aspect ratio
+      const scale = Math.min(maxWidth / quadrantWidth, maxHeight / quadrantHeight);
+
+      // Apply scale to maintain aspect ratio
+      const scaledWidth = quadrantWidth * scale;
+      const scaledHeight = quadrantHeight * scale;
+
+      setDimensions({ width: scaledWidth, height: scaledHeight });
+
+      // Debug aspect ratios
+      console.log('Quadrant Aspect Ratio:', quadrantAspectRatio);
+      console.log('Rendered Aspect Ratio:', scaledWidth / scaledHeight);
+      console.log('Scaled Dimensions:', { width: scaledWidth, height: scaledHeight });
     };
+
     window.addEventListener('resize', resizeHandler);
     resizeHandler();
     return () => window.removeEventListener('resize', resizeHandler);
   }, [quadrant.width, quadrant.height]);
 
-  //idk
-  // Save history and future to localStorage
+  // LocalStorage effect
   useEffect(() => {
     localStorage.setItem('history', JSON.stringify(history));
     localStorage.setItem('future', JSON.stringify(future));
   }, [history, future]);
+
+  // Debug logging
+  console.log('Image URL:', imageUrl);
+
+  // Early returns after all hooks
+  if (!imageUrl) return <div>No image URL provided</div>;
+  if (status === 'loading') return <div>Loading...</div>;
+  if (status === 'failed') return <div>Failed to load image</div>;
+
+  // Validate crop coordinates (assuming image is 1920x1080 based on database)
+  const crop = {
+    x: Math.max(0, quadrant.x || 0),
+    y: Math.max(0, quadrant.y || 0),
+    width: Math.min(quadrant.width || 1920, 1920),
+    height: Math.min(quadrant.height || 1080, 1080),
+  };
+  console.log('Crop values:', crop);
 
   const handleMouseDown = (e) => {
     const stage = e.target.getStage();
@@ -72,7 +110,6 @@ const DisplayQuadrant = ({ quadrant, labels, setLabels }) => {
     }
   };
 
-
   return (
     <div style={{ display: 'flex', flexDirection: 'row', alignItems: 'center' }}>
       <Stage
@@ -87,12 +124,8 @@ const DisplayQuadrant = ({ quadrant, labels, setLabels }) => {
             image={konvaImage}
             width={dimensions.width}
             height={dimensions.height}
-            crop={{
-              x: quadrant.x,
-              y: quadrant.y,
-              width: quadrant.width,
-              height: quadrant.height,
-            }}
+            crop={crop}
+            alt="Quadrant Image"
           />
           {labels.map((label, i) => (
             <Line
@@ -112,15 +145,14 @@ const DisplayQuadrant = ({ quadrant, labels, setLabels }) => {
             />
           )}
         </Layer>
-        </Stage>
-        <div style={{ display: 'flex', flexDirection: 'column', marginLeft: '30px' }}>
-          <h4>Draw a circle for all rocks in this image</h4>
-          <button style={{ margin: "10px", padding: "10px", borderRadius: "10px", background: "#c0c0c0", cursor: "pointer", width: '120px' }} onClick={undo}>Undo</button>
-          <button style={{ margin: "10px", padding: "10px", borderRadius: "10px", background: "#c0c0c0", cursor: "pointer", width: '120px' }} onClick={redo}>Redo</button>
-          <button style={{ margin: '10px', padding: '10px', borderRadius: '10px', background: '#007bff', color: '#fff', cursor: 'pointer', border: 'none', textDecoration: 'none', width: '120px' }} onClick={handleSubmit}>Submit</button>
-        </div>
-
-  </div>
+      </Stage>
+      <div style={{ display: 'flex', flexDirection: 'column', marginLeft: '30px' }}>
+        <h4>Draw a circle for all rocks in this image</h4>
+        <button style={{ margin: "10px", padding: "10px", borderRadius: "10px", background: "#c0c0c0", cursor: "pointer", width: '120px' }} onClick={undo}>Undo</button>
+        <button style={{ margin: "10px", padding: "10px", borderRadius: "10px", background: "#c0c0c0", cursor: "pointer", width: '120px' }} onClick={redo}>Redo</button>
+        <button style={{ margin: '10px', padding: '10px', borderRadius: '10px', background: '#007bff', color: '#fff', cursor: 'pointer', border: 'none', textDecoration: 'none', width: '120px' }} onClick={handleSubmit}>Submit</button>
+      </div>
+    </div>
   );
 };
 
