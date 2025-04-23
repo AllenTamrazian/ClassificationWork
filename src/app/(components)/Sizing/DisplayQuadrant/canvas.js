@@ -13,28 +13,31 @@ const DisplayQuadrant = ({ quadrant, labels, setLabels }) => {
   const [points, setPoints] = useState([]);
   const [dimensions, setDimensions] = useState({ width: quadrant.width, height: quadrant.height });
 
+  // Reset points, history, and future when quadrant changes
+  useEffect(() => {
+    setPoints([]);
+    setHistory([]);
+    setFuture([]);
+    localStorage.removeItem('history');
+    localStorage.removeItem('future');
+  }, [quadrant.id]);
+
   // Resize effect to preserve aspect ratio
   useEffect(() => {
     const resizeHandler = () => {
-      // Use the cropped quadrant's dimensions
       const quadrantWidth = quadrant.width || 1920;
       const quadrantHeight = quadrant.height || 1080;
       const quadrantAspectRatio = quadrantWidth / quadrantHeight;
 
-      // Calculate maximum dimensions based on viewport (80% of window size)
       const maxWidth = window.innerWidth * 0.8;
       const maxHeight = window.innerHeight * 0.8;
 
-      // Choose scale factor to fit within viewport while preserving aspect ratio
       const scale = Math.min(maxWidth / quadrantWidth, maxHeight / quadrantHeight);
-
-      // Apply scale to maintain aspect ratio
-      const scaledWidth = quadrantWidth * scale;
-      const scaledHeight = quadrantHeight * scale;
+      const scaledWidth = Math.max(1, quadrantWidth * scale); // Prevent zero/negative
+      const scaledHeight = Math.max(1, quadrantHeight * scale); // Prevent zero/negative
 
       setDimensions({ width: scaledWidth, height: scaledHeight });
 
-      // Debug aspect ratios
       console.log('Quadrant Aspect Ratio:', quadrantAspectRatio);
       console.log('Rendered Aspect Ratio:', scaledWidth / scaledHeight);
       console.log('Scaled Dimensions:', { width: scaledWidth, height: scaledHeight });
@@ -53,13 +56,16 @@ const DisplayQuadrant = ({ quadrant, labels, setLabels }) => {
 
   // Debug logging
   console.log('Image URL:', imageUrl);
+  console.log('Image Status:', status);
+  console.log('Konva Image:', konvaImage ? 'Loaded' : 'Not Loaded');
 
   // Early returns after all hooks
   if (!imageUrl) return <div>No image URL provided</div>;
   if (status === 'loading') return <div>Loading...</div>;
   if (status === 'failed') return <div>Failed to load image</div>;
+  if (!konvaImage) return <div>Image not loaded</div>;
 
-  // Validate crop coordinates (assuming image is 1920x1080 based on database)
+  // Validate crop coordinates
   const crop = {
     x: Math.max(0, quadrant.x || 0),
     y: Math.max(0, quadrant.y || 0),

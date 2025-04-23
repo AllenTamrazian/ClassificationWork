@@ -2,35 +2,43 @@
 
 import React, { useEffect, useState } from "react";
 import dynamic from 'next/dynamic';
-import { useSession } from "next-auth/react";
-import { redirect } from 'next/navigation';
+import { useSession, signIn } from "next-auth/react";
 
 const DisplayRocks = dynamic(() => import('../../(components)/Classifying/DisplayRock/canvas'), {
   ssr: false,
 });
 
 const ClassifyingPage = () => {
-  const { data: session } = useSession();
+  const { data: session, status } = useSession();
 
   // Redirect unauthenticated users
-  if (!session) {
-    redirect('/api/auth/signin?callbackUrl=/Tasks/Classifying');
-  }
+  useEffect(() => {
+    if (status === "loading") return;
+    if (status === "unauthenticated") {
+      signIn('auth0', { callbackUrl: '/Tasks/Classifying' });
+    }
+  }, [status]);
 
   const [rocks, setRocks] = useState([]);
-  const [currentIndex, setCurrentIndex] = useState(0); // Default to 0
+  const [currentIndex, setCurrentIndex] = useState(0);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
-  // Initialize currentIndex from localStorage on client-side
+  // Initialize currentIndex from localStorage
   useEffect(() => {
     const savedIndex = localStorage.getItem('lastViewedImage');
     if (savedIndex) {
-      setCurrentIndex(parseInt(savedIndex, 10));
+      const index = parseInt(savedIndex, 10);
+      if (!isNaN(index) && index >= 0) {
+        setCurrentIndex(index);
+      } else {
+        setCurrentIndex(0);
+        localStorage.setItem('lastViewedImage', '0');
+      }
     }
-  }, []); // Runs once on mount
+  }, []);
 
-  // Save currentIndex to localStorage when it changes
+  // Save currentIndex to localStorage
   useEffect(() => {
     localStorage.setItem('lastViewedImage', currentIndex.toString());
   }, [currentIndex]);
@@ -38,7 +46,7 @@ const ClassifyingPage = () => {
   // Handle Enter key for submission
   useEffect(() => {
     const handleKeyDown = (event) => {
-      if (event.key === 'Enter' && !loading && !error && rocks.length > 0) {
+      if (event.key === 'Enter' && !loading && !error && rocks.length > 0 && rocks[currentIndex]) {
         handleSubmit();
       }
     };
@@ -56,8 +64,17 @@ const ClassifyingPage = () => {
           throw new Error(`Failed to fetch rocks: ${response.status}`);
         }
         const data = await response.json();
-        console.log("Fetched rocks:", data[0]);
+        console.log("Fetched rocks:", JSON.stringify(data, null, 2));
+        console.log("First rock (if any):", data[0] ? JSON.stringify(data[0], null, 2) : "No rocks");
+        if (!Array.isArray(data) || data.length === 0) {
+          throw new Error("No rocks returned from API");
+        }
         setRocks(data);
+        // Reset currentIndex if out of bounds
+        if (currentIndex >= data.length) {
+          setCurrentIndex(0);
+          localStorage.setItem('lastViewedImage', '0');
+        }
       } catch (error) {
         console.error("Fetch error:", error);
         setError("Failed to load rocks. Please try again.");
@@ -69,26 +86,43 @@ const ClassifyingPage = () => {
   }, []);
 
   const handleSubmit = () => {
-    if (rocks.length > 0) {
-      setCurrentIndex((prevIndex) => (prevIndex + 1) % rocks.length);
+    if (rocks.length === 0 || !rocks[currentIndex]) {
+      console.error('No valid rock at currentIndex:', currentIndex, 'Rocks:', JSON.stringify(rocks, null, 2));
+      setCurrentIndex(0);
+      localStorage.setItem('lastViewedImage', '0');
+      return;
     }
+
+    console.log('Submitting rock:', JSON.stringify(rocks[currentIndex], null, 2));
+    setCurrentIndex((prevIndex) => {
+      const nextIndex = (prevIndex + 1) % Math.max(1, rocks.length);
+      console.log('Moving to next rock. CurrentIndex:', nextIndex, 'Rocks length:', rocks.length);
+      return nextIndex;
+    });
   };
 
   // Render loading, error, or empty states
   if (loading) return <div>Loading...</div>;
   if (error) return <div>{error}</div>;
-  if (rocks.length === 0) return <div>No rocks available.</div>;
+  if (rocks.length === 0 || !rocks[currentIndex]) {
+    console.error('No rocks available. Rocks:', JSON.stringify(rocks, null, 2), 'CurrentIndex:', currentIndex);
+    return <div>No rocks available. Check API response for valid data.</div>;
+  }
 
   return (
     <>
       <div style={{ display: "flex", justifyContent: "space-between", padding: "20px" }}>
         <div style={{ flex: 1 }}>
-          <DisplayRocks rock={rocks[currentIndex]} />
+          <DisplayRocks
+            key={`${rocks[currentIndex].id}-${currentIndex}`}
+            rock={rocks[currentIndex]}
+          />
         </div>
       </div>
-      <button onClick={handleSubmit} disabled={rocks.length === 0}>
+      <button onClick={handleSubmit} disabled={rocks.length === 0 || !rocks[currentIndex]}>
         Submit
       </button>
+      <p>helasdfasdfa</p>
     </>
   );
 };
